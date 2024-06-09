@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pong Game</title>
+    <style>
+        body {
+            margin: 0;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background-color: #000;
+        }
+
+        canvas {
+            border: 1px solid white;
+            background: black;
+        }
+
+        .menu {
+            display: none;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .menu button {
+            margin: 10px;
+            padding: 10px 20px;
+            font-size: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="menu" id="main-menu">
+        <button id="single-player">Single Player</button>
+        <button id="multiplayer">Multiplayer</button>
+    </div>
+    <canvas id="ping-pong" width="800" height="600" style="display: none;"></canvas>
+    <script>
+        const canvas = document.getElementById("ping-pong");
+        const ctx = canvas.getContext("2d");
+        const mainMenu = document.getElementById("main-menu");
+        const singlePlayerButton = document.getElementById("single-player");
+        const multiplayerButton = document.getElementById("multiplayer");
+
+        // Adjust canvas size to prevent pixelation
+        const dpi = window.devicePixelRatio;
+        canvas.width = 800 * dpi;
+        canvas.height = 600 * dpi;
+        canvas.style.width = "800px";
+        canvas.style.height = "600px";
+
+        // Game variables
+        const width = canvas.width;
+        const height = canvas.height;
+        const paddleHeight = 80;
+        const paddleWidth = 10;
+        let player1PaddleY = height / 2 - paddleHeight / 2;
+        let player2PaddleY = height / 2 - paddleHeight / 2;
+        const ballRadius = 10;
+        let ballX = width / 2;
+        let ballY = height / 2;
+        let ballDx = 2;
+        let ballDy = -2;
+        let player1Lives = 3;
+        let player2Lives = 3;
+        let winner = null;
+        let gameOver = false;
+        let ballSpeedMultiplier = 1.2;
+        const CPUSpeed = 3;
+
+        let powerUpX = 0;
+        let powerUpY = 0;
+        let powerUpRadius = 40;
+        let powerUpActive = false;
+        let powerUpColor = "yellow";
+
+        // Show main menu
+        function showMainMenu() {
+            canvas.style.display = "none";
+            mainMenu.style.display = "flex";
+        }
+
+        // Start single player game
+        function startSinglePlayer() {
+            mainMenu.style.display = "none";
+            canvas.style.display = "block";
+            gameOver = false;
+            winner = null;
+            player1Lives = 3;
+            player2Lives = 3;
+            ballX = width / 2;
+            ballY = height / 2;
+            ballDx = 2;
+            ballDy = -2;
+            ballSpeedMultiplier = 1.2;
+            gameLoop();
+        }
+
+        // Add event listeners for buttons
+        singlePlayerButton.addEventListener("click", startSinglePlayer);
+        multiplayerButton.addEventListener("click", () => alert("Multiplayer not yet implemented."));
+
+        // Update game state
+        function update() {
+            // Move the ball
+            ballX += ballDx * ballSpeedMultiplier;
+            ballY += ballDy * ballSpeedMultiplier;
+
+            // Wall collision
+            if (ballY + ballRadius >= height || ballY - ballRadius <= 0) {
+                ballDy *= -1;
+            }
+
+            // Paddle collision (reverse X direction)
+            if (
+                ballX - ballRadius <= paddleWidth &&
+                ballY >= player1PaddleY &&
+                ballY <= player1PaddleY + paddleHeight
+            ) {
+                ballDx *= -1;
+                ballSpeedMultiplier *= 1.2;
+            } else if (
+                ballX + ballRadius >= width - paddleWidth &&
+                ballY >= player2PaddleY &&
+                ballY <= player2PaddleY + paddleHeight
+            ) {
+                ballDx *= -1;
+                ballSpeedMultiplier *= 1.2;
+            }
+
+            // Ball goes out (game over for player who missed)
+            if (ballX + ballRadius <= 0) {
+                player1Lives--;
+                if (player1Lives === 0) {
+                    winner = 2;
+                    endGame();
+                } else {
+                    resetBall();
+                }
+            } else if (ballX - ballRadius >= width) {
+                player2Lives--;
+                if (player2Lives === 0) {
+                    winner = 1;
+                    endGame();
+                } else {
+                    resetBall();
+                }
+            }
+
+            // Move CPU paddle (simple AI with delay)
+            if (ballDx > 0) {
+                if ((player2PaddleY + paddleHeight / 2) > (ballY + ballRadius)) {
+                    player2PaddleY -= CPUSpeed;
+                } else {
+                    player2PaddleY += CPUSpeed;
+                }
+            }
+
+            player2PaddleY = Math.max(Math.min(player2PaddleY, height - paddleHeight), 0);
+
+            // Generate power-up every 15 seconds if not already active
+            if (!powerUpActive && Math.random() < 1 / (60 * 15)) {
+                powerUpX = Math.random() * (width - 2 * powerUpRadius) + powerUpRadius;
+                powerUpY = Math.random() * (height - 2 * powerUpRadius) + powerUpRadius;
+                powerUpActive = true;
+
+                // Randomly select power-up color
+                const random = Math.random();
+                if (random < 0.35) {
+                    powerUpColor = "yellow";
+                } else if (random < 0.7) {
+                    powerUpColor = "green";
+                } else {
+                    powerUpColor = "red";
+                }
+            }
+
+            // Check for collision with power-up
+            if (powerUpActive &&
+                ballX >= powerUpX - ballRadius &&
+                ballX <= powerUpX + powerUpRadius &&
+                ballY >= powerUpY - ballRadius &&
+                ballY <= powerUpY + powerUpRadius) {
+                if (powerUpColor === "yellow") {
+                    if (ballDx > 0) {
+                        player1Lives++;
+                    } else {
+                        player2Lives++;
+                    }
+                } else if (powerUpColor === "green") {
+                    if (ballDx > 0) {
+                        player2Lives--;
+                    } else {
+                        player1Lives--;
+                    }
+                } else if (powerUpColor === "red") {
+                    if (ballDx > 0) {
+                        if (player1Lives < player2Lives) {
+                            const temp = player1Lives;
+                            player1Lives = player2Lives;
+                            player2Lives = temp;
+                        } else {
+                            player1Lives++;
+                            player2Lives--;
+                        }
+                    } else {
+                        if (player2Lives < player1Lives) {
+                            const temp = player2Lives;
+                            player2Lives = player1Lives;
+                            player1Lives = temp;
+                        } else {
+                            player2Lives++;
+                            player1Lives--;
+                        }
+                    }
+                }
+                powerUpActive = false;
+            }
+        }
+
+        // Reset ball position and speed
+        function resetBall() {
+            ballX = width / 2;
+            ballY = height / 2;
+            ballDx = -ballDx; // Reverse ball direction after a score
+            ballSpeedMultiplier = 1.2; // Reset ball speed multiplier
+        }
+
+        // End game
+        function endGame() {
+            gameOver = true;
+            canvas.addEventListener("click", showMainMenu);
+        }
+
+        // Restart game
+        function showMainMenu() {
+            player1Lives = 3;
+            player2Lives = 3;
+            winner = null;
+            gameOver = false;
+            resetBall();
+            canvas.removeEventListener("click", showMainMenu);
+            canvas.style.display = "none";
+            mainMenu.style.display = "flex";
+        }
+
+        // Draw the game
+        function draw() {
+            ctx.clearRect(0, 0, width, height);
+
+            // Draw the ball
+            ctx.beginPath();
+            ctx.arc(ballX, ballY, ballRadius, 0, Math.PI * 2);
+            ctx.fillStyle = "white";
+            ctx.fill();
+            ctx.closePath();
+
+            // Draw the paddles
+            ctx.fillRect(0, player1PaddleY, paddleWidth, paddleHeight);
+            ctx.fillRect(width - paddleWidth, player2PaddleY, paddleWidth, paddleHeight);
+
+            // Draw power-up if active
+            if (powerUpActive) {
+                ctx.beginPath();
+                ctx.arc(powerUpX, powerUpY, powerUpRadius, 0, Math.PI * 2);
+                ctx.fillStyle = powerUpColor;
+                ctx.fill();
+                ctx.closePath();
+            }
+
+            // Draw player lives
+            ctx.fillStyle = "white";
+            ctx.font = "20px Arial";
+            ctx.fillText(`Player 1 Lives: ${player1Lives}`, 20, 30);
+            ctx.fillText(`Player 2 Lives: ${player2Lives}`, width - 180, 30);
+
+            // Draw game over message
+            if (gameOver) {
+                ctx.fillStyle = "white";
+                ctx.font = "30px Arial";
+                ctx.fillText(`Player ${winner} Wins!`, width / 2 - 100, height / 2 - 30);
+                ctx.fillText("Main Menu", width / 2 - 80, height / 2 + 30);
+            }
+        }
+
+        // Main game loop
+        function gameLoop() {
+            if (!gameOver) {
+                update();
+                draw();
+                requestAnimationFrame(gameLoop);
+            } else {
+                draw();
+            }
+        }
+
+        // Move player paddle based on mouse position
+        canvas.addEventListener("mousemove", (e) => {
+            const box = canvas.getBoundingClientRect();
+            const scaleY = height / box.height;
+
+            let y = (e.clientY - box.top) * scaleY;
+
+            // Ensure the paddle doesn't go below the lower boundary
+            if (y > height - paddleHeight) {
+                y = height - paddleHeight;
+            } else if (y < 0) {
+                y = 0;
+            }
+
+            // Copy position
+            player1PaddleY = y;
+        });
+        // Start with main menu
+        showMainMenu();
+    </script>
+</body>
+</html>
+
+
